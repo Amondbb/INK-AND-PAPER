@@ -65,6 +65,15 @@
           <p id="goalEmpty" class="muted small hidden">아직 목표가 없어요. 이번 해 목표 권수를 정해보세요.</p>
         </section>
 
+        <section class="card genre-stats-card">
+          <div class="goal-title" style="margin-bottom:12px;">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 20V10M12 20V4M20 20v-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <span>장르별 비중</span>
+          </div>
+          <div id="genreStatsBar" class="genre-stats-bar"></div>
+          <div id="genreStatsLegend" class="genre-stats-legend"></div>
+        </section>
+
         <div class="shelf-header">
           <h2 id="shelfTitle"></h2>
           <button id="addBookBtn" class="btn-primary">
@@ -72,6 +81,8 @@
             책 기록하기
           </button>
         </div>
+
+        <div id="genreFilterRow" class="genre-chip-row filter-row"></div>
 
         <div id="bookList" class="book-list"></div>
       </div>

@@ -242,6 +242,57 @@ input:focus {
   transition: width 0.4s ease;
 }
 
+.genre-stats-card { margin-bottom: 22px; }
+
+.genre-stats-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--blue-100);
+}
+.genre-stats-bar .seg {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+
+.genre-stats-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 14px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.legend-item b { color: var(--navy); }
+
+.genre-empty { font-size: 13px; color: var(--muted); }
+
+.filter-row { margin-bottom: 14px; }
+.genre-chip.filter-chip { }
+
+.book-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.edit-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+}
+.edit-btn:hover { color: var(--blue-600); background: var(--blue-050); }
+
 .shelf-header {
   display: flex;
   align-items: center;
