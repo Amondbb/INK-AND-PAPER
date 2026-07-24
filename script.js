@@ -8,8 +8,24 @@ try {
 }
 
 const GENRES = ["소설", "에세이", "인문/사회", "경제/경영", "역사", "과학", "자기계발", "시", "만화", "기타"];
-const GENRE_COLORS = ["#2F6FEE", "#5B8DEF", "#8DAEF5", "#13294B", "#4C5A75", "#7FA8F0", "#A6C2F7", "#1D3E6E", "#3C6BC4", "#8592AC"];
+const GENRE_COLORS = ["#2F6FEE", "#14B8A6", "#8B5CF6", "#F59E0B", "#EF4444", "#10B981", "#EC4899", "#6366F1", "#D97706", "#64748B"];
 let genreFilter = "전체";
+
+function genreColor(genre) {
+  const idx = GENRES.indexOf(genre);
+  if (idx >= 0) return GENRE_COLORS[idx % GENRE_COLORS.length];
+  let hash = 0;
+  for (let i = 0; i < genre.length; i++) {
+    hash = genre.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return GENRE_COLORS[Math.abs(hash) % GENRE_COLORS.length];
+}
+
+function chipMarkup(genre, selected) {
+  const color = genreColor(genre);
+  const style = selected ? `background:${color};border-color:${color};color:#fff;` : `border-color:${color}55;`;
+  return `<button type="button" class="genre-chip" data-genre="${escapeHtml(genre)}" style="${style}"><span class="chip-dot" style="background:${color};"></span>${escapeHtml(genre)}</button>`;
+}
 const YEAR = new Date().getFullYear();
 
 let state = {
@@ -177,7 +193,7 @@ function renderShelf() {
       <div class="book-main">
         <div class="book-title-row">
           <span class="book-title">${escapeHtml(b.title)}</span>
-          <span class="genre-badge">${escapeHtml(b.genre)}</span>
+          <span class="genre-badge" style="background:${genreColor(b.genre)};">${escapeHtml(b.genre)}</span>
         </div>
         <div class="book-sub">${escapeHtml(b.author)} · ${b.date}</div>
         <div class="stars">${starSvgRow(b.rating)}</div>
@@ -207,10 +223,14 @@ function renderGenreFilter(allBooks) {
 
   const options = ["전체", ...presentGenres];
   filterRow.innerHTML = options
-    .map(
-      (g) =>
-        `<button type="button" class="genre-chip filter-chip${genreFilter === g ? " selected" : ""}" data-genre="${escapeHtml(g)}">${escapeHtml(g)}</button>`
-    )
+    .map((g) => {
+      const isAll = g === "전체";
+      const color = isAll ? "var(--navy)" : genreColor(g);
+      const selected = genreFilter === g;
+      const style = selected ? `background:${color};border-color:${color};color:#fff;` : `border-color:${color}55;`;
+      const dot = isAll ? "" : `<span class="chip-dot" style="background:${color};"></span>`;
+      return `<button type="button" class="genre-chip filter-chip" data-genre="${escapeHtml(g)}" style="${style}">${dot}${escapeHtml(g)}</button>`;
+    })
     .join("");
 
   filterRow.querySelectorAll(".filter-chip").forEach((chip) => {
@@ -240,17 +260,17 @@ function renderGenreStats(allBooks) {
   const total = allBooks.length;
 
   bar.innerHTML = entries
-    .map(([genre, count], i) => {
+    .map(([genre, count]) => {
       const pct = (count / total) * 100;
-      const color = GENRE_COLORS[i % GENRE_COLORS.length];
+      const color = genreColor(genre);
       return `<div class="seg" style="width:${pct}%;background:${color};" title="${escapeHtml(genre)} ${count}권"></div>`;
     })
     .join("");
 
   legend.innerHTML = entries
-    .map(([genre, count], i) => {
+    .map(([genre, count]) => {
       const pct = Math.round((count / total) * 100);
-      const color = GENRE_COLORS[i % GENRE_COLORS.length];
+      const color = genreColor(genre);
       return `<div class="legend-item"><span class="legend-dot" style="background:${color};"></span>${escapeHtml(genre)} <b>${count}권</b> (${pct}%)</div>`;
     })
     .join("");
@@ -330,7 +350,7 @@ function openBookModal(existing = null) {
     <div class="field">
       <label>장르</label>
       <div class="genre-chip-row" id="f_genreRow">
-        ${GENRES.map((g) => `<button type="button" class="genre-chip${g === selectedGenre && !initialCustomGenre ? " selected" : ""}" data-genre="${g}">${g}</button>`).join("")}
+        ${GENRES.map((g) => chipMarkup(g, g === selectedGenre && !initialCustomGenre)).join("")}
       </div>
       <input type="text" id="f_customGenre" placeholder="직접 입력 (선택)" />
     </div>
@@ -357,8 +377,13 @@ function openBookModal(existing = null) {
     chip.onclick = () => {
       selectedGenre = chip.dataset.genre;
       document.getElementById("f_customGenre").value = "";
-      modalBody.querySelectorAll(".genre-chip").forEach((c) => c.classList.remove("selected"));
-      chip.classList.add("selected");
+      modalBody.querySelectorAll(".genre-chip").forEach((c) => {
+        const color = genreColor(c.dataset.genre);
+        c.style.cssText = `border-color:${color}55;`;
+        c.classList.remove("selected");
+      });
+      const color = genreColor(chip.dataset.genre);
+      chip.style.cssText = `background:${color};border-color:${color};color:#fff;`;
     };
   });
 
