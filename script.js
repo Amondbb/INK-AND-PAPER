@@ -28,7 +28,26 @@ function chipMarkup(genre, selected) {
 }
 const CURRENT_YEAR = new Date().getFullYear();
 const ALL = "all";
-let selectedYear = CURRENT_YEAR; // 숫자(연도) 또는 ALL(전체 보기)
+
+// 기기별 기본값 (이 기기의 브라우저에만 저장)
+const PREFS_KEY = "inkpaper_prefs";
+const DEFAULT_PREFS = { startView: "year", genre: "", rating: 0 };
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    return { ...DEFAULT_PREFS, ...(raw ? JSON.parse(raw) : {}) };
+  } catch (e) {
+    return { ...DEFAULT_PREFS };
+  }
+}
+function savePrefs() {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch (e) {}
+}
+let prefs = loadPrefs();
+
+let selectedYear = prefs.startView === "all" ? ALL : CURRENT_YEAR; // 숫자(연도) 또는 ALL(전체 보기)
 const extraYears = new Set(); // 사용자가 직접 추가한 연도 (책/목표가 아직 없어도 표시)
 
 function yearOf(dateStr) {
@@ -409,8 +428,10 @@ function defaultDateForYear(year) {
 function openBookModal(existing = null) {
   const isEdit = !!existing;
   modalTitle.textContent = isEdit ? "책 정보 수정" : "책 기록하기";
-  let selectedRating = isEdit ? existing.rating : 0;
-  let selectedGenre = isEdit && GENRES.includes(existing.genre) ? existing.genre : GENRES[0];
+  let selectedRating = isEdit ? existing.rating : Number(prefs.rating) || 0;
+  let selectedGenre = isEdit
+    ? (GENRES.includes(existing.genre) ? existing.genre : GENRES[0])
+    : (GENRES.includes(prefs.genre) ? prefs.genre : GENRES[0]);
   let initialCustomGenre = isEdit && !GENRES.includes(existing.genre) ? existing.genre : "";
 
   modalBody.innerHTML = `
@@ -666,29 +687,366 @@ function deleteYear(year, bookIds) {
 
 // ---------- Settings modal ----------
 document.getElementById("settingsBtn").onclick = () => {
+  renderSettings();
+  openModal();
+};
+
+function renderSettings() {
+  const me = activeReader;
+  const scroller = modalBody.closest(".modal");
+  const keepTop = scroller ? scroller.scrollTop : 0;
   modalTitle.textContent = "설정";
+
+  const genreCounts = {};
+  booksForReader(me).forEach((b) => {
+    genreCounts[b.genre] = (genreCounts[b.genre] || 0) + 1;
+  });
+  const genreEntries = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]);
+  const defGenre = GENRES.includes(prefs.genre) ? prefs.genre : GENRES[0];
+
+  const genreRows = genreEntries.length
+    ? genreEntries
+        .map(
+          ([g, n]) => `
+      <div class="gm-row" data-genre="${escapeHtml(g)}">
+        <span class="gm-name"><span class="chip-dot" style="background:${genreColor(g)};"></span>${escapeHtml(g)}</span>
+        <span class="gm-count">${n}권</span>
+        <button type="button" class="edit-btn gm-edit" aria-label="이름 바꾸기">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        </button>
+      </div>`
+        )
+        .join("")
+    : `<p class="muted small" style="margin:0;">아직 기록된 장르가 없어요.</p>`;
+
   modalBody.innerHTML = `
-    <div class="field">
-      <label>첫 번째 사람 이름</label>
-      <input type="text" id="s_name0" value="${escapeHtml(state.readers[0])}" />
+    <div class="set-section">
+      <h3 class="set-title">이름</h3>
+      <div class="field">
+        <label>첫 번째 사람 이름</label>
+        <input type="text" id="s_name0" value="${escapeHtml(state.readers[0])}" />
+      </div>
+      <div class="field">
+        <label>두 번째 사람 이름</label>
+        <input type="text" id="s_name1" value="${escapeHtml(state.readers[1])}" />
+      </div>
+      <button id="s_save" class="btn-primary btn-sm">이름 저장</button>
     </div>
-    <div class="field">
-      <label>두 번째 사람 이름</label>
-      <input type="text" id="s_name1" value="${escapeHtml(state.readers[1])}" />
+
+    <div class="set-section">
+      <h3 class="set-title">기본값 <span class="set-hint">이 기기에만 저장돼요</span></h3>
+      <div class="field">
+        <label>앱을 열 때 처음 보여줄 화면</label>
+        <div class="tabs" id="p_start" style="margin-bottom:0;">
+          <button type="button" class="tab-btn${prefs.startView !== "all" ? " active" : ""}" data-v="year">올해</button>
+          <button type="button" class="tab-btn${prefs.startView === "all" ? " active" : ""}" data-v="all">전체</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>책 기록 시 기본 장르</label>
+        <div class="genre-chip-row" id="p_genre">
+          ${GENRES.map((g) => chipMarkup(g, g === defGenre)).join("")}
+        </div>
+      </div>
+      <div class="field">
+        <label>책 기록 시 기본 별점 <span class="set-hint">같은 별을 다시 누르면 해제돼요</span></label>
+        <div class="stars" id="p_stars">${starSvgRow(Number(prefs.rating) || 0, 24, "p_stars")}</div>
+      </div>
     </div>
-    <button id="s_save" class="btn-primary btn-block">저장하기</button>
+
+    <div class="set-section">
+      <h3 class="set-title">장르 관리 <span class="set-hint">${escapeHtml(readerName(me))}의 기록 기준</span></h3>
+      <p class="muted small" style="margin:0 0 8px;">이름을 바꾸면 해당 장르의 책이 모두 바뀌어요. 이미 있는 장르 이름으로 바꾸면 하나로 합쳐져요.</p>
+      <div id="gm_list">${genreRows}</div>
+    </div>
+
+    <div class="set-section">
+      <h3 class="set-title">데이터 백업</h3>
+      <div class="backup-actions">
+        <button type="button" class="btn-outline" id="b_json">백업 파일 내려받기 (JSON · 전체)</button>
+        <button type="button" class="btn-outline" id="b_csv">엑셀용 내려받기 (CSV · 전체)</button>
+        <button type="button" class="btn-outline" id="b_import">백업 파일에서 가져오기</button>
+        <input type="file" id="b_file" accept=".json,application/json" hidden />
+      </div>
+      <p class="muted small" style="margin:10px 0 0;">가져오기는 백업에 있는 책 중 지금 없는 책만 추가하고, 기존 기록은 바꾸거나 지우지 않아요.</p>
+    </div>
   `;
+
+  // 이름 저장
   document.getElementById("s_save").onclick = () => {
     const n0 = document.getElementById("s_name0").value.trim();
     const n1 = document.getElementById("s_name1").value.trim();
-    if (n0 && n1) {
-      saveReaders(n0, n1);
-      closeModal();
-      showToast("설정을 저장했어요");
+    if (!n0 || !n1) {
+      showToast("두 사람의 이름을 모두 입력해 주세요");
+      return;
     }
+    saveReaders(n0, n1);
+    showToast("이름을 저장했어요");
   };
-  openModal();
-};
+
+  // 기본값: 시작 화면
+  modalBody.querySelectorAll("#p_start .tab-btn").forEach((btn) => {
+    btn.onclick = () => {
+      prefs.startView = btn.dataset.v;
+      savePrefs();
+      modalBody.querySelectorAll("#p_start .tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      showToast("기본값을 저장했어요");
+    };
+  });
+
+  // 기본값: 장르
+  modalBody.querySelectorAll("#p_genre .genre-chip").forEach((chip) => {
+    chip.onclick = () => {
+      prefs.genre = chip.dataset.genre;
+      savePrefs();
+      modalBody.querySelectorAll("#p_genre .genre-chip").forEach((c) => {
+        c.style.cssText = `border-color:${genreColor(c.dataset.genre)}55;`;
+      });
+      const color = genreColor(chip.dataset.genre);
+      chip.style.cssText = `background:${color};border-color:${color};color:#fff;`;
+      showToast("기본값을 저장했어요");
+    };
+  });
+
+  // 기본값: 별점
+  function attachPrefStars() {
+    modalBody.querySelectorAll("#p_stars .star-btn").forEach((btn) => {
+      btn.onclick = () => {
+        const n = Number(btn.dataset.n);
+        prefs.rating = prefs.rating === n ? 0 : n;
+        savePrefs();
+        document.getElementById("p_stars").innerHTML = starSvgRow(prefs.rating, 24, "p_stars");
+        attachPrefStars();
+        showToast("기본값을 저장했어요");
+      };
+    });
+  }
+  attachPrefStars();
+
+  // 장르 관리
+  modalBody.querySelectorAll(".gm-row").forEach((row) => {
+    const oldGenre = row.dataset.genre;
+    row.querySelector(".gm-edit").onclick = () => {
+      row.innerHTML = `
+        <input type="text" class="gm-input" maxlength="20" value="${escapeHtml(oldGenre)}" />
+        <button type="button" class="btn-primary btn-sm gm-ok">저장</button>
+        <button type="button" class="link-btn gm-cancel">취소</button>`;
+      const input = row.querySelector(".gm-input");
+      input.focus();
+      input.select();
+      row.querySelector(".gm-cancel").onclick = renderSettings;
+      const commit = () => {
+        const newGenre = input.value.trim();
+        if (!newGenre) {
+          showToast("장르 이름을 입력해 주세요");
+          return;
+        }
+        if (newGenre === oldGenre) {
+          renderSettings();
+          return;
+        }
+        renameGenre(oldGenre, newGenre);
+      };
+      row.querySelector(".gm-ok").onclick = commit;
+      input.onkeydown = (e) => {
+        if (e.key === "Enter") commit();
+        if (e.key === "Escape") renderSettings();
+      };
+    };
+  });
+
+  // 백업
+  document.getElementById("b_json").onclick = exportJson;
+  document.getElementById("b_csv").onclick = exportCsv;
+  const fileInput = document.getElementById("b_file");
+  document.getElementById("b_import").onclick = () => fileInput.click();
+  fileInput.onchange = () => {
+    const file = fileInput.files && fileInput.files[0];
+    fileInput.value = "";
+    if (file) handleImportFile(file);
+  };
+
+  if (scroller) scroller.scrollTop = keepTop;
+}
+
+// ---------- 장르 이름 바꾸기 / 합치기 ----------
+function renameGenre(oldGenre, newGenre) {
+  const me = activeReader;
+  const merged = booksForReader(me).some((b) => b.genre === newGenre);
+  const updates = {};
+  booksForReader(me).forEach((b) => {
+    if (b.genre === oldGenre) updates[`books/${b.id}/genre`] = newGenre;
+  });
+  if (db && Object.keys(updates).length) db.ref().update(updates);
+  if (genreFilter === oldGenre) genreFilter = "전체";
+  showToast(merged ? `"${newGenre}"(으)로 합쳤어요` : "장르 이름을 바꿨어요");
+  setTimeout(renderSettings, 60);
+}
+
+// ---------- 백업: 내려받기 ----------
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+function dateStamp() {
+  const d = new Date();
+  return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+}
+
+function downloadFile(filename, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function exportJson() {
+  const goals = {};
+  Object.keys(state.goals || {}).forEach((k) => {
+    if (/^\d{4}$/.test(k)) goals[k] = { 0: getGoal(k, 0), 1: getGoal(k, 1) };
+  });
+  const payload = {
+    app: "ink-and-paper",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    readers: state.readers,
+    goals,
+    books: state.books || {},
+  };
+  downloadFile(`ink-and-paper-backup-${dateStamp()}.json`, JSON.stringify(payload, null, 2), "application/json");
+  showToast("백업 파일을 내려받았어요");
+}
+
+function csvCell(v) {
+  let t = String(v ?? "");
+  if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; // 엑셀 수식으로 해석되는 것 방지
+  return `"${t.replace(/"/g, '""')}"`;
+}
+
+function exportCsv() {
+  const rows = Object.values(state.books || {})
+    .slice()
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const header = ["독서자", "제목", "저자", "완독일자", "평점", "장르"];
+  const lines = [header.map(csvCell).join(",")];
+  rows.forEach((b) => {
+    lines.push(
+      [readerName(b.reader), b.title, b.author, b.date, b.rating ?? 0, b.genre].map(csvCell).join(",")
+    );
+  });
+  downloadFile(`ink-and-paper-${dateStamp()}.csv`, "\uFEFF" + lines.join("\r\n"), "text/csv;charset=utf-8");
+  showToast("CSV 파일을 내려받았어요");
+}
+
+// ---------- 백업: 가져오기 ----------
+function bookKey(b) {
+  return [b.reader, b.title, b.author, b.date].join("|");
+}
+
+function sanitizeBook(b) {
+  if (!b || typeof b !== "object") return null;
+  const title = String(b.title ?? "").trim().slice(0, 200);
+  const author = String(b.author ?? "").trim().slice(0, 200);
+  const date = String(b.date ?? "");
+  const reader = Number(b.reader);
+  if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(date) || (reader !== 0 && reader !== 1)) return null;
+  const rating = Math.max(0, Math.min(5, Math.round(Number(b.rating) || 0)));
+  const genre = String(b.genre ?? "").trim().slice(0, 30) || "기타";
+  return { reader, title, author, date, rating, genre };
+}
+
+function planImport(data) {
+  if (!data || typeof data !== "object" || !data.books || typeof data.books !== "object") {
+    throw new Error("invalid backup");
+  }
+  const existingIds = new Set(Object.keys(state.books || {}));
+  const existingKeys = new Set(Object.values(state.books || {}).map(bookKey));
+
+  const books = {};
+  let dup = 0;
+  let invalid = 0;
+  Object.entries(data.books).forEach(([id, raw]) => {
+    const clean = sanitizeBook(raw);
+    if (!clean) {
+      invalid++;
+      return;
+    }
+    if (existingIds.has(id) || existingKeys.has(bookKey(clean))) {
+      dup++;
+      return;
+    }
+    const key = /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : db.ref("books").push().key;
+    books[key] = clean;
+    existingKeys.add(bookKey(clean));
+  });
+
+  const goals = {};
+  const goalSrc = data.goals && typeof data.goals === "object" ? data.goals : {};
+  Object.keys(goalSrc).forEach((k) => {
+    const y = Number(k);
+    if (!/^\d{4}$/.test(k) || y < 1900 || y > 2100 || !goalSrc[k] || typeof goalSrc[k] !== "object") return;
+    [0, 1].forEach((i) => {
+      const v = Math.round(Number(goalSrc[k][i]));
+      if (v > 0 && getGoal(y, i) === 0) goals[`${y}/${i}`] = v;
+    });
+  });
+
+  return { books, goals, dup, invalid };
+}
+
+function handleImportFile(file) {
+  if (!db) {
+    showToast("Firebase 연결을 확인해 주세요");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onerror = () => showToast("파일을 읽지 못했어요");
+  reader.onload = () => {
+    let plan;
+    try {
+      plan = planImport(JSON.parse(reader.result));
+    } catch (e) {
+      showToast("올바른 백업 파일이 아니에요");
+      return;
+    }
+    openImportConfirm(plan);
+  };
+  reader.readAsText(file, "utf-8");
+}
+
+function openImportConfirm(plan) {
+  const nBooks = Object.keys(plan.books).length;
+  const nGoals = Object.keys(plan.goals).length;
+  const nothing = nBooks === 0 && nGoals === 0;
+
+  modalTitle.textContent = "백업 가져오기";
+  modalBody.innerHTML = `
+    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:var(--ink-soft);">
+      ${nothing ? "새로 추가할 내용이 없어요." : "아래 내용이 추가돼요. 기존 기록은 바꾸거나 지우지 않아요."}
+    </p>
+    <ul style="margin:0 0 18px;padding-left:18px;font-size:14px;line-height:1.8;color:var(--ink);">
+      <li>새로 추가될 책: <b>${nBooks}권</b></li>
+      <li>비어 있어서 채워질 연간 목표: <b>${nGoals}개</b></li>
+      <li class="muted">이미 있어서 건너뛸 책: ${plan.dup}권</li>
+      ${plan.invalid ? `<li class="muted">형식이 맞지 않아 건너뛸 항목: ${plan.invalid}개</li>` : ""}
+    </ul>
+    <button id="i_confirm" class="btn-primary btn-block" style="margin-top:0;" ${nothing ? "disabled" : ""}>가져오기</button>
+    <button id="i_cancel" class="link-btn" style="display:block;margin:12px auto 0;">돌아가기</button>
+  `;
+  document.getElementById("i_cancel").onclick = renderSettings;
+  document.getElementById("i_confirm").onclick = () => {
+    const updates = {};
+    Object.entries(plan.books).forEach(([id, b]) => (updates["books/" + id] = b));
+    Object.entries(plan.goals).forEach(([path, v]) => (updates["goals/" + path] = v));
+    db.ref().update(updates);
+    closeModal();
+    showToast(`책 ${nBooks}권을 가져왔어요`);
+  };
+}
 
 function openModal() {
   modalOverlay.classList.remove("hidden");
