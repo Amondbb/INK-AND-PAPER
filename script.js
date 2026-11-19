@@ -185,7 +185,10 @@ function renderYearTabs() {
           `<button type="button" class="year-chip${y === selectedYear ? " active" : ""}" data-year="${y}">${y}</button>`
       )
       .join("") +
-    `<button type="button" class="year-chip year-add" id="yearAddBtn" aria-label="연도 추가">+ 연도 추가</button>`;
+    `<button type="button" class="year-chip year-add" id="yearAddBtn" aria-label="연도 추가">+ 연도 추가</button>` +
+    (selectedYear !== ALL
+      ? `<button type="button" class="year-chip year-del" id="yearDelBtn" aria-label="${selectedYear}년 삭제">${selectedYear}년 삭제</button>`
+      : "");
 
   el.querySelectorAll(".year-chip[data-year]").forEach((chip) => {
     chip.onclick = () => {
@@ -195,6 +198,8 @@ function renderYearTabs() {
     };
   });
   document.getElementById("yearAddBtn").onclick = openYearModal;
+  const delBtn = document.getElementById("yearDelBtn");
+  if (delBtn) delBtn.onclick = () => openYearDeleteModal(selectedYear);
 }
 
 function booksForReader(idx) {
@@ -523,6 +528,54 @@ function openYearModal() {
     render();
   };
   openModal();
+}
+
+// ---------- Year delete modal ----------
+function openYearDeleteModal(year) {
+  const bookEntries = Object.entries(state.books || {}).filter(([, b]) => yearOf(b.date) === year);
+  const goalObj = (state.goals && state.goals[year]) || {};
+  const hasGoal = [0, 1].some((i) => Number(goalObj[i]) > 0);
+
+  const perReader = [0, 1].map((i) => {
+    const n = bookEntries.filter(([, b]) => b.reader === i).length;
+    return `${escapeHtml(state.readers[i] || `리더 ${i + 1}`)} ${n}권`;
+  });
+
+  modalTitle.textContent = `${year}년 삭제`;
+  modalBody.innerHTML = `
+    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:var(--ink-soft);">
+      ${year}년의 아래 데이터가 <b style="color:var(--navy);">두 사람 모두에게서</b> 영구 삭제돼요. 되돌릴 수 없어요.
+    </p>
+    <ul style="margin:0 0 16px;padding-left:18px;font-size:14px;line-height:1.8;color:var(--ink);">
+      <li>기록된 책: ${bookEntries.length}권 (${perReader.join(", ")})</li>
+      <li>연간 목표: ${hasGoal ? "있음" : "없음"}</li>
+    </ul>
+    ${year === CURRENT_YEAR ? `<p class="muted small" style="margin:0 0 4px;">올해는 연도 칩이 계속 표시되지만 데이터는 모두 비워져요.</p>` : ""}
+    <button id="yd_confirm" class="btn-primary btn-block" style="background:linear-gradient(135deg,#E5566B,#D6455B);box-shadow:0 8px 18px -6px rgba(214,69,91,0.5);">삭제하기</button>
+    <button id="yd_cancel" class="link-btn" style="display:block;margin:12px auto 0;">취소</button>
+  `;
+  document.getElementById("yd_cancel").onclick = closeModal;
+  document.getElementById("yd_confirm").onclick = () => {
+    deleteYear(year, bookEntries.map(([id]) => id));
+    closeModal();
+  };
+  openModal();
+}
+
+function deleteYear(year, bookIds) {
+  extraYears.delete(year);
+  if (selectedYear === year) {
+    selectedYear = year === CURRENT_YEAR ? CURRENT_YEAR : ALL;
+    genreFilter = "전체";
+  }
+  if (db) {
+    const updates = {};
+    bookIds.forEach((id) => (updates["books/" + id] = null));
+    updates["goals/" + year] = null;
+    db.ref().update(updates);
+  }
+  showToast(`${year}년 데이터를 삭제했어요`);
+  render();
 }
 
 // ---------- Settings modal ----------

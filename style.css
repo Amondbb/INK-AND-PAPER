@@ -236,6 +236,13 @@ input:focus {
   background: var(--blue-050);
 }
 
+.year-chip.year-del {
+  color: #D6455B;
+  border-color: #F3C9D0;
+  background: #FDEFEF;
+}
+.year-chip.year-del:hover { border-color: #D6455B; color: #D6455B; }
+
 .goal-card { margin-bottom: 22px; }
 .goal-top {
   display: flex;
