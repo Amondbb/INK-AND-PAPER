@@ -236,12 +236,34 @@ input:focus {
   background: var(--blue-050);
 }
 
-.year-chip.year-del {
-  color: #D6455B;
-  border-color: #F3C9D0;
-  background: #FDEFEF;
+.year-chip.year-manage {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
 }
-.year-chip.year-del:hover { border-color: #D6455B; color: #D6455B; }
+.year-chip.year-manage:hover { color: var(--blue-600); border-color: var(--border); background: #fff; }
+
+.manage-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 20px 0 14px;
+}
+.quiet-danger {
+  display: block;
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.quiet-danger:hover { color: #D6455B; background: #FDEFEF; border-color: #F3C9D0; }
+.quiet-danger.solid { color: #D6455B; }
 
 .goal-card { margin-bottom: 22px; }
 .goal-top {
