@@ -202,6 +202,40 @@ input:focus {
   box-shadow: 0 4px 12px -4px rgba(19,41,75,0.25);
 }
 
+.year-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0 14px;
+  margin-bottom: 2px;
+  scrollbar-width: none;
+}
+.year-row::-webkit-scrollbar { display: none; }
+.year-chip {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: #fff;
+  color: var(--ink-soft);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.year-chip:hover { border-color: var(--blue-500); color: var(--blue-600); }
+.year-chip.active {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.year-chip.year-add {
+  border-style: dashed;
+  color: var(--blue-600);
+  background: var(--blue-050);
+}
+
 .goal-card { margin-bottom: 22px; }
 .goal-top {
   display: flex;
@@ -344,14 +378,6 @@ input:focus {
 }
 .book-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
 .stars { display: flex; gap: 2px; margin-top: 7px; }
-.book-note {
-  margin-top: 8px;
-  font-size: 13px;
-  color: var(--ink-soft);
-  font-style: italic;
-  padding-left: 10px;
-  border-left: 2px solid var(--blue-100);
-}
 
 .delete-btn {
   background: none;

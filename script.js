@@ -26,7 +26,33 @@ function chipMarkup(genre, selected) {
   const style = selected ? `background:${color};border-color:${color};color:#fff;` : `border-color:${color}55;`;
   return `<button type="button" class="genre-chip" data-genre="${escapeHtml(genre)}" style="${style}"><span class="chip-dot" style="background:${color};"></span>${escapeHtml(genre)}</button>`;
 }
-const YEAR = new Date().getFullYear();
+const CURRENT_YEAR = new Date().getFullYear();
+const ALL = "all";
+let selectedYear = CURRENT_YEAR; // 숫자(연도) 또는 ALL(전체 보기)
+const extraYears = new Set(); // 사용자가 직접 추가한 연도 (책/목표가 아직 없어도 표시)
+
+function yearOf(dateStr) {
+  const y = parseInt(String(dateStr || "").slice(0, 4), 10);
+  return Number.isFinite(y) ? y : null;
+}
+
+function availableYears() {
+  const years = new Set([CURRENT_YEAR, ...extraYears]);
+  if (selectedYear !== ALL) years.add(selectedYear);
+  Object.values(state.books || {}).forEach((b) => {
+    const y = yearOf(b.date);
+    if (y) years.add(y);
+  });
+  Object.keys(state.goals || {}).forEach((k) => {
+    if (/^\d{4}$/.test(k)) years.add(Number(k));
+  });
+  return Array.from(years).sort((a, b) => b - a);
+}
+
+function getGoal(year, idx) {
+  const g = state.goals && state.goals[year];
+  return Number(g && g[idx]) || 0;
+}
 
 let state = {
   readers: ["", ""],
@@ -55,7 +81,6 @@ const modalTitle = document.getElementById("modalTitle");
 const modalBody = document.getElementById("modalBody");
 const toastEl = document.getElementById("toast");
 
-goalYearLabel.textContent = YEAR + "년 목표";
 
 function showToast(msg) {
   toastEl.textContent = msg;
@@ -71,7 +96,20 @@ if (db) {
     render();
   });
   db.ref("goals").on("value", (snap) => {
-    state.goals = snap.val() || {};
+    const v = snap.val() || {};
+    // 예전 구조(goals/0, goals/1 = 숫자)를 올해 목표(goals/연도/0 ...)로 한 번만 이전
+    const updates = {};
+    [0, 1].forEach((i) => {
+      if (typeof v[i] === "number") {
+        updates[`${CURRENT_YEAR}/${i}`] = v[i];
+        updates[String(i)] = null;
+      }
+    });
+    if (Object.keys(updates).length) {
+      db.ref("goals").update(updates);
+      return; // 이전이 끝나면 리스너가 다시 호출돼요
+    }
+    state.goals = v;
     render();
   });
   db.ref("books").on("value", (snap) => {
@@ -87,9 +125,9 @@ function saveReaders(name0, name1) {
   db.ref("readers").set({ 0: name0, 1: name1 });
 }
 
-function saveGoal(idx, value) {
+function saveGoal(year, idx, value) {
   if (!db) return;
-  db.ref("goals/" + idx).set(Number(value) || 0);
+  db.ref(`goals/${year}/${idx}`).set(Number(value) || 0);
 }
 
 function addBook(book) {
@@ -116,6 +154,7 @@ function render() {
   if (!hasReaders) return;
 
   renderTabs();
+  renderYearTabs();
   renderGoal();
   renderShelf();
 }
@@ -135,17 +174,47 @@ function renderTabs() {
   });
 }
 
+function renderYearTabs() {
+  const el = document.getElementById("yearTabs");
+  const years = availableYears();
+  el.innerHTML =
+    `<button type="button" class="year-chip${selectedYear === ALL ? " active" : ""}" data-year="${ALL}">전체</button>` +
+    years
+      .map(
+        (y) =>
+          `<button type="button" class="year-chip${y === selectedYear ? " active" : ""}" data-year="${y}">${y}</button>`
+      )
+      .join("") +
+    `<button type="button" class="year-chip year-add" id="yearAddBtn" aria-label="연도 추가">+ 연도 추가</button>`;
+
+  el.querySelectorAll(".year-chip[data-year]").forEach((chip) => {
+    chip.onclick = () => {
+      selectedYear = chip.dataset.year === ALL ? ALL : Number(chip.dataset.year);
+      genreFilter = "전체";
+      render();
+    };
+  });
+  document.getElementById("yearAddBtn").onclick = openYearModal;
+}
+
 function booksForReader(idx) {
   return Object.entries(state.books || {})
     .filter(([, b]) => b.reader === idx)
     .map(([id, b]) => ({ id, ...b }));
 }
 
+function booksForReaderYear(idx, year) {
+  return year === ALL ? booksForReader(idx) : booksForReader(idx).filter((b) => yearOf(b.date) === year);
+}
+
 function renderGoal() {
-  const goal = Number(state.goals[activeReader] || 0);
-  const count = booksForReader(activeReader).filter(
-    (b) => new Date(b.date).getFullYear() === YEAR
-  ).length;
+  const goalCard = document.querySelector(".goal-card");
+  goalCard.classList.toggle("hidden", selectedYear === ALL);
+  if (selectedYear === ALL) return;
+  goalYearLabel.textContent = selectedYear + "년 목표";
+  goalEditRow.classList.add("hidden");
+  const goal = getGoal(selectedYear, activeReader);
+  const count = booksForReaderYear(activeReader, selectedYear).length;
 
   goalInput.value = goal || "";
 
@@ -165,9 +234,9 @@ function renderGoal() {
 
 function renderShelf() {
   const name = state.readers[activeReader] || `리더 ${activeReader + 1}`;
-  shelfTitle.textContent = `${name}의 책장`;
+  shelfTitle.textContent = selectedYear === ALL ? `${name}의 전체 책장` : `${name}의 ${selectedYear}년 책장`;
 
-  const allBooks = booksForReader(activeReader);
+  const allBooks = booksForReaderYear(activeReader, selectedYear);
   renderGenreStats(allBooks);
   renderGenreFilter(allBooks);
 
@@ -181,7 +250,7 @@ function renderShelf() {
     bookListEl.innerHTML = `
       <div class="card empty-state">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M4 4.5C4 3.67 4.67 3 5.5 3H11V21H5.5C4.67 21 4 20.33 4 19.5V4.5Z" stroke="currentColor" stroke-width="1.6"/><path d="M20 4.5C20 3.67 19.33 3 18.5 3H13V21H18.5C19.33 21 20 20.33 20 19.5V4.5Z" stroke="currentColor" stroke-width="1.6"/></svg>
-        <div>${allBooks.length === 0 ? "아직 기록된 책이 없어요. 첫 책을 기록해보세요." : "이 장르에 기록된 책이 없어요."}</div>
+        <div>${allBooks.length === 0 ? (selectedYear === ALL ? "아직 기록된 책이 없어요. 첫 책을 기록해보세요." : `${selectedYear}년에 기록된 책이 없어요. 첫 책을 기록해보세요.`) : "이 장르에 기록된 책이 없어요."}</div>
       </div>`;
     return;
   }
@@ -197,7 +266,6 @@ function renderShelf() {
         </div>
         <div class="book-sub">${escapeHtml(b.author)} · ${b.date}</div>
         <div class="stars">${starSvgRow(b.rating)}</div>
-        ${b.note ? `<div class="book-note">“${escapeHtml(b.note)}”</div>` : ""}
       </div>
       <div class="book-actions">
         <button class="edit-btn" aria-label="수정">
@@ -316,13 +384,22 @@ document.getElementById("goalEditBtn").onclick = () => {
   goalEditRow.classList.toggle("hidden");
 };
 document.getElementById("goalSaveBtn").onclick = () => {
-  saveGoal(activeReader, goalInput.value);
+  saveGoal(selectedYear, activeReader, goalInput.value);
   goalEditRow.classList.add("hidden");
-  showToast("목표를 저장했어요");
+  showToast(`${selectedYear}년 목표를 저장했어요`);
 };
 
 // ---------- Add / edit book modal ----------
 document.getElementById("addBookBtn").onclick = () => openBookModal();
+
+function defaultDateForYear(year) {
+  if (year === ALL || year === CURRENT_YEAR) {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+  return `${year}-12-31`;
+}
 
 function openBookModal(existing = null) {
   const isEdit = !!existing;
@@ -355,18 +432,13 @@ function openBookModal(existing = null) {
       </div>
       <input type="text" id="f_customGenre" placeholder="직접 입력 (선택)" />
     </div>
-    <div class="field">
-      <label>한줄평 <span class="muted small">(선택)</span></label>
-      <input type="text" id="f_note" placeholder="예: 다시 읽고 싶은 책" maxlength="80" />
-    </div>
     <button id="f_save" class="btn-primary btn-block">${isEdit ? "수정 완료" : "저장하기"}</button>
   `;
 
   document.getElementById("f_title").value = isEdit ? existing.title : "";
   document.getElementById("f_author").value = isEdit ? existing.author : "";
-  document.getElementById("f_date").value = isEdit ? existing.date : new Date().toISOString().slice(0, 10);
+  document.getElementById("f_date").value = isEdit ? existing.date : defaultDateForYear(selectedYear);
   document.getElementById("f_customGenre").value = initialCustomGenre;
-  document.getElementById("f_note").value = isEdit ? existing.note || "" : "";
 
   function attachStarHandlers() {
     modalBody.querySelectorAll(".star-btn").forEach((btn) => {
@@ -398,7 +470,6 @@ function openBookModal(existing = null) {
     const author = document.getElementById("f_author").value.trim();
     const date = document.getElementById("f_date").value;
     const customGenre = document.getElementById("f_customGenre").value.trim();
-    const note = document.getElementById("f_note").value.trim();
 
     if (!title || !author || !date) {
       showToast("제목, 저자, 완독일자를 입력해 주세요");
@@ -411,8 +482,10 @@ function openBookModal(existing = null) {
       date,
       rating: selectedRating,
       genre: customGenre || selectedGenre,
-      note,
     };
+
+    const savedYear = yearOf(date);
+    if (savedYear && selectedYear !== ALL) selectedYear = savedYear;
 
     if (isEdit) {
       updateBook(existing.id, payload);
@@ -424,6 +497,31 @@ function openBookModal(existing = null) {
     closeModal();
   };
 
+  openModal();
+}
+
+// ---------- Year add modal ----------
+function openYearModal() {
+  modalTitle.textContent = "연도 추가";
+  modalBody.innerHTML = `
+    <div class="field">
+      <label>추가할 연도</label>
+      <input type="number" id="y_input" min="1900" max="2100" placeholder="예: 2025" />
+    </div>
+    <button id="y_save" class="btn-primary btn-block">추가하기</button>
+  `;
+  document.getElementById("y_save").onclick = () => {
+    const y = parseInt(document.getElementById("y_input").value, 10);
+    if (!y || y < 1900 || y > 2100) {
+      showToast("올바른 연도를 입력해 주세요");
+      return;
+    }
+    extraYears.add(y);
+    selectedYear = y;
+    genreFilter = "전체";
+    closeModal();
+    render();
+  };
   openModal();
 }
 
