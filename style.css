@@ -467,6 +467,14 @@ input:focus {
 }
 .book-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
 .stars { display: flex; gap: 2px; margin-top: 7px; }
+.book-note {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-style: italic;
+  padding-left: 10px;
+  border-left: 2px solid var(--blue-100);
+}
 
 .delete-btn {
   background: none;

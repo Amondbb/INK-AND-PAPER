@@ -290,6 +290,7 @@ function renderShelf() {
         </div>
         <div class="book-sub">${escapeHtml(b.author)} · ${b.date}</div>
         <div class="stars">${starSvgRow(b.rating)}</div>
+        ${b.note ? `<div class="book-note">“${escapeHtml(b.note)}”</div>` : ""}
       </div>
       <div class="book-actions">
         <button class="edit-btn" aria-label="수정">
@@ -458,6 +459,10 @@ function openBookModal(existing = null) {
       </div>
       <input type="text" id="f_customGenre" placeholder="직접 입력 (선택)" />
     </div>
+    <div class="field">
+      <label>한줄평 <span class="muted small">(선택)</span></label>
+      <input type="text" id="f_note" placeholder="예: 다시 읽고 싶은 책" maxlength="80" />
+    </div>
     <button id="f_save" class="btn-primary btn-block">${isEdit ? "수정 완료" : "저장하기"}</button>
   `;
 
@@ -465,6 +470,7 @@ function openBookModal(existing = null) {
   document.getElementById("f_author").value = isEdit ? existing.author : "";
   document.getElementById("f_date").value = isEdit ? existing.date : defaultDateForYear(selectedYear);
   document.getElementById("f_customGenre").value = initialCustomGenre;
+  document.getElementById("f_note").value = isEdit ? existing.note || "" : "";
 
   function attachStarHandlers() {
     modalBody.querySelectorAll(".star-btn").forEach((btn) => {
@@ -496,6 +502,7 @@ function openBookModal(existing = null) {
     const author = document.getElementById("f_author").value.trim();
     const date = document.getElementById("f_date").value;
     const customGenre = document.getElementById("f_customGenre").value.trim();
+    const note = document.getElementById("f_note").value.trim();
 
     if (!title || !author || !date) {
       showToast("제목, 저자, 완독일자를 입력해 주세요");
@@ -508,6 +515,7 @@ function openBookModal(existing = null) {
       date,
       rating: selectedRating,
       genre: customGenre || selectedGenre,
+      note,
     };
 
     const savedYear = yearOf(date);
@@ -931,11 +939,11 @@ function exportCsv() {
   const rows = Object.values(state.books || {})
     .slice()
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  const header = ["독서자", "제목", "저자", "완독일자", "평점", "장르"];
+  const header = ["독서자", "제목", "저자", "완독일자", "평점", "장르", "한줄평"];
   const lines = [header.map(csvCell).join(",")];
   rows.forEach((b) => {
     lines.push(
-      [readerName(b.reader), b.title, b.author, b.date, b.rating ?? 0, b.genre].map(csvCell).join(",")
+      [readerName(b.reader), b.title, b.author, b.date, b.rating ?? 0, b.genre, b.note ?? ""].map(csvCell).join(",")
     );
   });
   downloadFile(`ink-and-paper-${dateStamp()}.csv`, "\uFEFF" + lines.join("\r\n"), "text/csv;charset=utf-8");
@@ -956,7 +964,8 @@ function sanitizeBook(b) {
   if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(date) || (reader !== 0 && reader !== 1)) return null;
   const rating = Math.max(0, Math.min(5, Math.round(Number(b.rating) || 0)));
   const genre = String(b.genre ?? "").trim().slice(0, 30) || "기타";
-  return { reader, title, author, date, rating, genre };
+  const note = String(b.note ?? "").trim().slice(0, 80);
+  return { reader, title, author, date, rating, genre, note };
 }
 
 function planImport(data) {
